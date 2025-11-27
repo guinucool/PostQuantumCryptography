@@ -1,4 +1,8 @@
 from sage.all import matrix, vector
+from ggh import ggh_decrypt, ggh_read_key_from_file
+from ntru import ntru_decapsulation, ntru_read_key_from_file
+from utils import read_vector_from_file, write_vector_to_file
+import sys
 
 def lll_reduce_matrix(m: matrix = None, f: vector = None) -> matrix:
     """
@@ -21,3 +25,37 @@ def lll_reduce_matrix(m: matrix = None, f: vector = None) -> matrix:
     
     # Return the LLL-reduced matrix form
     return m_lll
+
+if __name__ == "__main__":
+    
+    if (len(sys.argv) < 4):
+        print("Usage:")
+        print(" : attack-ggh -> python3 lll.py ggh <keyname> <vectorname>")
+        print(" : attack-ntru -> python3 lll.py ntru <keyname> <vectorname>")
+        
+    else:
+            
+        if (sys.argv[1] == "ggh"):
+            public = ggh_read_key_from_file(sys.argv[2])
+            c = read_vector_from_file(sys.argv[3])
+            
+            attack = lll_reduce_matrix(m = public)
+            r = ggh_decrypt(attack, c)
+            write_vector_to_file(r, sys.argv[3] + '_att')
+
+            print("Attack Decrypted vector: ", r)
+            
+        elif (sys.argv[1] == "ntru"):
+            params, public = ntru_read_key_from_file(sys.argv[2])
+            c = read_vector_from_file(sys.argv[3])
+            
+            attack = lll_reduce_matrix(f = public)
+            r = ntru_decapsulation(c, params[1], params[2], Tf = attack)
+            write_vector_to_file(r, sys.argv[3] + '_att')
+
+            print("Attack Decapsulated vector: ", r)
+
+        else:
+            print("Usage:")
+            print(" : attack-ggh -> python3 lll.py ggh <keyname> <vectorname>")
+            print(" : attack-ntru -> python3 lll.py ntru <keyname> <vectorname>")

@@ -1,3 +1,6 @@
+# Testing folders for executing of single scripts
+testing/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

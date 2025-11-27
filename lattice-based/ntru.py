@@ -222,7 +222,7 @@ def ntru_generate_key_pair(n: int, p: int, q: int, df: int) -> tuple:
     private_keys = ntru_generate_private_keys(n, p, q, df)
     
     # Generate the public key from the private key
-    public_key = ntru_generate_public_key(private_keys[0], private_keys[1])
+    public_key = ntru_generate_public_key(private_keys[0], private_keys[1], q)
     
     # Return the key pair
     return private_keys[0], public_key
