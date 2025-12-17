@@ -239,7 +239,7 @@ def classic_mceleice_decrypt(params: tuple, private_key: tuple, c0: vector) -> v
     v = vector(GF(2), v)
     
     # Decode the ciphertext to retrieve the error vector
-    c = gc.decode_to_code(v, 'NearestNeighbor') # FOR FUTURE: Might return none, not sure
+    c = gc.decode_to_code(v, 'Syndrome') # FOR FUTURE: Might return none, not sure
     
     # Check if the decoding distance was successful
     #if (v - c).norm() > t:
@@ -311,6 +311,7 @@ def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple) ->
     return K
 
 params = classic_mceleice_encapsulate_parameters(n=3488, t=64, m=12)
+#params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
 
 print(params)
 
