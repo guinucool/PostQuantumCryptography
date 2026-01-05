@@ -43,13 +43,15 @@ def classic_mceleice_generate_private_key(params: tuple) -> matrix:
     # Generate the monic irreducible polynomial and the random support vector
     g = f2m['x'].irreducible_element(t)
     
-    f2m_elements = list(f2m)
     suport_list = []
     
     while len(suport_list) < n:
         
         # Choose a random element
-        el = sec.choice(f2m_elements)
+        el = vector(GF(2), [sec.choice([0, 1]) for _ in range(m)])
+        
+        # Convert the list to a field element
+        el = f2m(el)
         
         # Check if the element is already in the list or if g(el) == 0
         if el not in suport_list and g(el) != 0:
@@ -84,13 +86,22 @@ def classic_mceleice_generate_public_key(private_key: tuple, params: tuple) -> m
     _, g, l = private_key
     
     # Generate the Goppa code
-    c = codes.GoppaCode(g, l)
+    bc = codes.GeneralizedReedSolomonCode(l, k)
+    c = codes.SubfieldSubcode(bc, GF(2))
+    #c = codes.GoppaCode(g, l)
     
     # Generate the Parity-Check Matrix
     Ht = c.parity_check_matrix()
     
+    print(Ht)
+    
     # Permutate the Parity-Check Matrix to get its echelon form
     H = Ht.echelon_form()
+    
+    print(H)
+    print(identity_matrix(m * t) == H[:, :m * t])
+    print(identity_matrix(m * t))
+    print(H[:, :m * t])
     
     # Get the public key matrix and check if it is valid
     T = H[:, (m * t):]
@@ -113,12 +124,16 @@ def classic_mceleice_generate_key_pair(params: tuple) -> tuple:
     # Generate the private key
     private_key = classic_mceleice_generate_private_key(params)
     
+    print("Private key generated.")
+    
     # Generate the public key
     public_key = classic_mceleice_generate_public_key(private_key, params)
     
+    print("Public key generated.")
+    
     # Check if the public key is valid
-    if public_key is None:
-        return classic_mceleice_generate_key_pair(params)
+    #if public_key is None:
+    #    return classic_mceleice_generate_key_pair(params)
     
     # Return the key pair
     return (private_key, public_key)
@@ -232,18 +247,24 @@ def classic_mceleice_decrypt(params: tuple, private_key: tuple, c0: vector) -> v
     _, g, L = private_key
     
     # Generate the Goppa code
-    gc = codes.GoppaCode(g, L)
+    #gc = codes.GoppaCode(g, L)
+    
+    # Generate the Generalized Reed-Solomon Code
+    bc = codes.GeneralizedReedSolomonCode(L, k)
+    gc = codes.SubfieldSubcode(bc, GF(2))
     
     # Extend the ciphertext to match the codeword length
     v = c0.list() + [0] * (n - len(c0))
     v = vector(GF(2), v)
     
     # Decode the ciphertext to retrieve the error vector
-    c = gc.decode_to_code(v, 'Syndrome') # FOR FUTURE: Might return none, not sure
+    c = bc.decode_to_code(v) # FOR FUTURE: Might return none, not sure
     
     # Check if the decoding distance was successful
     #if (v - c).norm() > t:
     #    return None
+    
+    print(c)
     
     # Retrieve the original message by subtracting the error vector
     e = v + c
@@ -310,8 +331,8 @@ def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple) ->
     # Return the generated session key hash
     return K
 
-params = classic_mceleice_encapsulate_parameters(n=3488, t=64, m=12)
-#params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
+#params = classic_mceleice_encapsulate_parameters(n=3488, t=64, m=12)
+params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
 
 print(params)
 
@@ -323,12 +344,20 @@ e = classic_mceleice_generate_error_vector(params)
 
 print("Error vector generated successfully.\n", e)
 
-c, K = classic_mceleice_encapsulate(pair[1], e)
+ct = classic_mceleice_encrypt(pair[1], e)
 
-print("Session generated successfully.\n", K)
+print("Ciphertext generated successfully.\n", ct)
 
-nK = classic_mceleice_decapsulate(params, pair[0], c)
+d = classic_mceleice_decrypt(params, pair[0], ct)
 
-print("Decrypted message successfully.\n", nK)
+print("Decrypted message successfully.\n", d)
 
-print("Session keys match:", K == nK)
+#c, K = classic_mceleice_encapsulate(pair[1], e)
+
+#print("Session generated successfully.\n", K)
+
+#nK = classic_mceleice_decapsulate(params, pair[0], c)
+
+#print("Decrypted message successfully.\n", nK)
+
+#print("Session keys match:", K == nK)

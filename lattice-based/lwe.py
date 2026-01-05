@@ -1,4 +1,4 @@
-from sage.all import vector, matrix, ZZ, Zmod, sqrt, pi
+from sage.all import vector, matrix, ZZ, Zmod
 from sage.stats.distributions.discrete_gaussian_integer import DiscreteGaussianDistributionIntegerSampler
 import secrets as sec
 
@@ -57,11 +57,8 @@ def lwe_generate_public_key(S: matrix, params: tuple, a: float) -> matrix:
     # Extract parameters
     n, m, l, _, _, q = params
     
-    # Calculate the standard deviation
-    sigma = a * q / sqrt(2*pi)
-    
     # Create the discrete Gaussian sampler
-    D = DiscreteGaussianDistributionIntegerSampler(sigma)
+    D = DiscreteGaussianDistributionIntegerSampler(a)
     
     # Generate a random matrix A
     A = matrix(Zmod(q), n, m, [sec.choice(range(q)) for _ in range(n*m)])
@@ -130,7 +127,7 @@ def lwe_f_inverse(v: vector, params: tuple) -> vector:
     _, _, _, t, _, q = params
     
     # Return the result of f inverse
-    return vector(Zmod(q), [round((t * int(elem)) / q) for elem in list(v)])
+    return vector(Zmod(t), [round((t * int(elem)) / q) for elem in list(v)])
 
 def lwe_encrypt(v: vector, public_key: tuple, params: tuple) -> tuple:
     """
@@ -208,21 +205,3 @@ def lwe_generate_random_vector(params: tuple) -> vector:
     
     # Return the random vector
     return r
-
-params = lwe_encapsulate_parameters(4, 8, 3, 3, 1, 5)
-
-private_key, public_key = lwe_generate_key_pair(params, 0.012)
-
-v = lwe_generate_random_vector(params)
-
-print("LWE Parameters: ", params)
-print("Private Key: \n", private_key)
-print("Public Key: \n", public_key)
-
-ct = lwe_encrypt(v, public_key, params)
-
-decrypted_v = lwe_decrypt(ct, private_key, params)
-
-print("Original vector: ", v)
-print("Encrypted tuple: ", ct)
-print("Decrypted vector: ", decrypted_v)
