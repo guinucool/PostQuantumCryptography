@@ -1,4 +1,4 @@
-from sage.all import matrix, vector, GF, codes, identity_matrix
+from sage.all import matrix, vector, GF, codes, identity_matrix, PolynomialRing
 import secrets as sec
 import hashlib as hl
 import math
@@ -86,22 +86,13 @@ def classic_mceleice_generate_public_key(private_key: tuple, params: tuple) -> m
     _, g, l = private_key
     
     # Generate the Goppa code
-    bc = codes.GeneralizedReedSolomonCode(l, k)
-    c = codes.SubfieldSubcode(bc, GF(2))
-    #c = codes.GoppaCode(g, l)
+    c = codes.GoppaCode(g, l)
     
     # Generate the Parity-Check Matrix
     Ht = c.parity_check_matrix()
     
-    print(Ht)
-    
     # Permutate the Parity-Check Matrix to get its echelon form
     H = Ht.echelon_form()
-    
-    print(H)
-    print(identity_matrix(m * t) == H[:, :m * t])
-    print(identity_matrix(m * t))
-    print(H[:, :m * t])
     
     # Get the public key matrix and check if it is valid
     T = H[:, (m * t):]
@@ -124,16 +115,12 @@ def classic_mceleice_generate_key_pair(params: tuple) -> tuple:
     # Generate the private key
     private_key = classic_mceleice_generate_private_key(params)
     
-    print("Private key generated.")
-    
     # Generate the public key
     public_key = classic_mceleice_generate_public_key(private_key, params)
     
-    print("Public key generated.")
-    
     # Check if the public key is valid
-    #if public_key is None:
-    #    return classic_mceleice_generate_key_pair(params)
+    if public_key is None:
+        return classic_mceleice_generate_key_pair(params)
     
     # Return the key pair
     return (private_key, public_key)
@@ -246,31 +233,38 @@ def classic_mceleice_decrypt(params: tuple, private_key: tuple, c0: vector) -> v
     # Extract private key components
     _, g, L = private_key
     
-    # Generate the Goppa code
-    #gc = codes.GoppaCode(g, L)
-    
-    # Generate the Generalized Reed-Solomon Code
-    bc = codes.GeneralizedReedSolomonCode(L, k)
-    gc = codes.SubfieldSubcode(bc, GF(2))
-    
     # Extend the ciphertext to match the codeword length
     v = c0.list() + [0] * (n - len(c0))
     v = vector(GF(2), v)
     
-    # Decode the ciphertext to retrieve the error vector
-    c = bc.decode_to_code(v) # FOR FUTURE: Might return none, not sure
+    # Define the polynomial ring for the finite field
+    R = PolynomialRing(GF(2**m, 'z'), 'x')
     
-    # Check if the decoding distance was successful
-    #if (v - c).norm() > t:
-    #    return None
+    # Compute the syndrome
+    syndrome = sum(v[i]*R(R((0,1)) - L[i]).inverse_mod(g**2) for i in range(n))
     
-    print(c)
+    # Solve the key equation using the Extended Euclidean Algorithm
+    remainders = [g**2, R(syndrome)]
+    coefs = [R(0),R(1)]
     
-    # Retrieve the original message by subtracting the error vector
-    e = v + c
+    while remainders[-1].degree() >= t:
+        q, r = remainders[-2].quo_rem(remainders[-1])
+        remainders.append(r)
+        coefs.append(coefs[-2] - q * coefs[-1])
+    
+    # The error locator polynomial is the last coefficient
+    locator = coefs[-1]
+    
+    # Find the error positions by evaluating the locator polynomial
+    e = [0 for _ in range(n)]
+    
+    for i in range(n):
+        
+        if locator(L[i]) == 0:
+            e[i] = 1
 
     # Return the decrypted message
-    return e
+    return vector(GF(2), e)
 
 def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple) -> vector:
     """
@@ -299,11 +293,6 @@ def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple) ->
     
     # Decrypt the ciphertext using the private key
     e = classic_mceleice_decrypt(params, private_key, c0)
-    
-    # Check if decryption was successful
-    if e is None:
-        b = 0
-        e = s
         
     # Generate the error hash
     h = hl.shake_256()
@@ -331,8 +320,8 @@ def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple) ->
     # Return the generated session key hash
     return K
 
-#params = classic_mceleice_encapsulate_parameters(n=3488, t=64, m=12)
-params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
+params = classic_mceleice_encapsulate_parameters(n=3488, t=64, m=12)
+#params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
 
 print(params)
 
@@ -344,20 +333,20 @@ e = classic_mceleice_generate_error_vector(params)
 
 print("Error vector generated successfully.\n", e)
 
-ct = classic_mceleice_encrypt(pair[1], e)
+#ct = classic_mceleice_encrypt(pair[1], e)
 
-print("Ciphertext generated successfully.\n", ct)
+#print("Ciphertext generated successfully.\n", ct)
 
-d = classic_mceleice_decrypt(params, pair[0], ct)
+#d = classic_mceleice_decrypt(params, pair[0], ct)
 
-print("Decrypted message successfully.\n", d)
+#print("Decrypted message successfully.\n", d)
 
-#c, K = classic_mceleice_encapsulate(pair[1], e)
+c, K = classic_mceleice_encapsulate(pair[1], e)
 
-#print("Session generated successfully.\n", K)
+print("Session generated successfully.\n", K)
 
-#nK = classic_mceleice_decapsulate(params, pair[0], c)
+nK = classic_mceleice_decapsulate(params, pair[0], c)
 
-#print("Decrypted message successfully.\n", nK)
+print("Decrypted message successfully.\n", nK)
 
-#print("Session keys match:", K == nK)
+print("Session keys match:", K == nK)
