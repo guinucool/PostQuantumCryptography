@@ -1,4 +1,4 @@
-from sage.all import GF, vector, matrix
+from sage.all import GF, vector, matrix, PolynomialRing, xgcd
 import secrets as sec
 import random as rnd
 import hashlib as hl
@@ -20,11 +20,20 @@ def bike_encapsulate_parameters(r: int, w: int, t: int, l: int) -> tuple:
         tuple: A tuple containing all the BIKE parameters.
     """
     
-    # Generate the ring field
-    R = GF(2**r, 'z')
+    # Generate the binary finite field
+    F2 = GF(2)
+    
+    # Generate the polynomial ring field
+    PR = PolynomialRing(F2, 'x')
+    
+    # Compute the modulus polynomial
+    modulus = PR.gen() ** r - PR(1)
+    
+    # Generate the cyclic polynomial ring field
+    R = PR.quotient(modulus, 'x')
     
     # Return the parameters as a tuple
-    return (r, w, t, l, R)
+    return (r, w, t, l, F2, PR, R, modulus)
 
 def bike_encapsulate_decoding_parameters(nb: int, de: int, a: float, b: float) -> tuple:
     """
@@ -80,7 +89,7 @@ def bike_generate_random_vector(r: int, weight: int, seed: int = None) -> vector
         weight -= 1
     
     # Return the generated vector
-    return vector(GF(2), vec)
+    return vec
 
 def bike_generate_private_key(params: tuple) -> tuple:
     """
@@ -94,11 +103,11 @@ def bike_generate_private_key(params: tuple) -> tuple:
     """
     
     # Extract parameters from the tuple
-    r, w, t, l, R = params
+    r, w, t, l, F2, PR, R, modulus = params
     
     # Generate the private vectors
-    h0 = R(bike_generate_random_vector(r, w/2))
-    h1 = R(bike_generate_random_vector(r, w/2))
+    h0 = R(bike_generate_random_vector(r, w // 2))
+    h1 = R(bike_generate_random_vector(r, w // 2))
     o = sec.token_bytes(l // 8)
     
     # Return the private key as a tuple
@@ -118,8 +127,19 @@ def bike_generate_public_key(hw: tuple) -> object:
     # Extract private key components
     h0, h1, _ = hw
     
+    # Compute the inverse of the private key in the polynomial ring
+    h0_poly = h0.lift()
+    g, h0_inv_poly, _ = xgcd(h0_poly, h0.parent().modulus())
+    
+    # If the private key is not invertible, raise an exception
+    if g != 1:
+        return None
+    
+    # Convert the inverse back to the cyclic polynomial ring
+    h0_inv = h0.parent()(h0_inv_poly)
+
     # Compute the public key
-    h = h1 * (h0 ** (-1))
+    h = h1 * (h0_inv)
 
     # Return the public key
     return h
@@ -140,6 +160,10 @@ def bike_generate_key_pair(params: tuple) -> tuple:
     
     # Generate the public key
     public_key = bike_generate_public_key(private_key)
+        
+    # If the public key could not be generated, retry
+    if public_key is None:
+        return bike_generate_key_pair(params)
     
     # Return the key pair
     return (private_key, public_key)
@@ -157,7 +181,7 @@ def bike_generate_error_vector_pair(params: tuple, m: bytes) -> tuple:
     """
     
     # Extract parameters from tuple
-    r, w, t, l, R = params
+    r, w, t, l, F2, PR, R, modulus = params
     
     # Convert the message into a seed
     seed = int.from_bytes(m, 'little')
@@ -170,8 +194,8 @@ def bike_generate_error_vector_pair(params: tuple, m: bytes) -> tuple:
     t1 = t - t0
     
     # Generate the error vectors from the message
-    e0 = R(bike_generate_random_vector(r, t0, int.from_bytes(m, 'little')))
-    e1 = R(bike_generate_random_vector(r, t1, int.from_bytes(m, 'little')))
+    e0 = R(bike_generate_random_vector(r, t0, randomizer.randint(0, sys.maxsize)))
+    e1 = R(bike_generate_random_vector(r, t1, randomizer.randint(0, sys.maxsize)))
     
     # Return the error vectors pair
     return (e0, e1)
@@ -290,22 +314,22 @@ def bike_encapsulate(params: tuple, h: object) -> tuple:
     # Return the generated session key and capsule
     return (K, c)
 
-def bike_decrypt(params: tuple, decod: tuple, hw: tuple, c0: object) -> tuple:
+def bike_decrypt(params: tuple, decod: tuple, hw: tuple, s: object) -> tuple:
     """
     Decrypt a ciphertext using the BIKE cryptosystem.
 
     Parameters:
         params (tuple): The BIKE parameters.
         decod (tuple): The tuple containing the BIKE decoding parameters.
-        private_key (tuple): A tuple containing the private key components (h0, h1, o).
-        c0 (object): The ciphertext.
+        hw (tuple): A tuple containing the private key components (h0, h1, o).
+        s (object): The syndrome ciphertext vector.
     
     Returns:
         tuple: The error vectors (e0, e1).
     """
     
     # Extract parameters from the tuple
-    r, w, t, l, R = params
+    r, w, t, l, F2, PR, R, modulus = params
     
     # Extract parameters from the tuple
     nb, de, f = decod
@@ -313,151 +337,132 @@ def bike_decrypt(params: tuple, decod: tuple, hw: tuple, c0: object) -> tuple:
     # Extract private key components
     h0, h1, _ = hw
     
-    # Define auxilary functions for the algorithm
-    def ctr(H: matrix, s: vector, j: int) -> int:
-        """
-        Calculate the hamming weight of the AND between the j-th column of H and s.
+    # Compute the syndrome
+    syndrome = s * h0
+    
+    # Decode the syndrome
+    return bike_decode(params, syndrome, hw)
+
+#def bike_decoder()
+
+def bike_decode(params: tuple, s: object, hw: tuple, max_iterations=30) -> tuple:
+    """
+    BIKE Decoder using the Black-Gray-Flip (BGF) algorithm.
+    
+    Parameters:
+        params (tuple): The BIKE parameters.
+        s (object): The syndrome to decode.
+        hw (tuple): The private key components.
+        max_iterations (int): Maximum number of iterations.
         
-        Parameters:
-            H: The circulant matrix originated from the keys.
-            s: The syndrome vector.
-            j: The current iteration.
+    Returns:
+        tuple: The decoded error vectors (e0, e1).
+    """
+    
+    # Extract parameters from tuple
+    r, w, t, l, F2, PR, R, modulus = params
+    
+    # Compute algorithm parameters
+    d = w // 2
+    
+    # Extract private key components
+    h0, h1, _ = hw
+    
+    # Convert syndrome to list
+    syndrome = list(s)
+    
+    # Calculate weighted positions of private keys
+    h0_pos = [i for i, c in enumerate(list(h0)) if c == 1]
+    h1_pos = [i for i, c in enumerate(list(h1)) if c == 1]
+    
+    # Initialize error vectors
+    e0 = [F2(0)] * r
+    e1 = [F2(0)] * r
+    
+    # Initialize the algorithm
+    for i in range(max_iterations):
+        
+        # Calculate syndrome weight
+        syndrome_weight = sum(1 for bit in syndrome if bit == 1)
+        
+        # Check for successful decoding
+        if syndrome_weight == 0:
             
-        Returns:
-            int: The hamming weight.
-        """
+            # Return the decoded error vectors
+            return (R(e0), R(e1))
         
-        # Placeholder for the weight
-        weight = 0
+        # Calculate the thresholds
+        noise_floor = syndrome_weight * d // r
+        base_threshold = max(int(d * 0.7), noise_floor + 2)
         
-        # Count the number of matching ones
-        for i in range(len(s)):
+        # Compute unsatisfied parity checks (UPCs)
+        candidates = []
+        
+        for j in range(r):
+            upc0 = sum(1 for bit in h0_pos if syndrome[(j + bit) % r] == 1)
+            upc1 = sum(1 for bit in h1_pos if syndrome[(j + bit) % r] == 1)
+            candidates.append((upc0, 'e0', j))
+            candidates.append((upc1, 'e1', j))
             
-            # Check if the one matches
-            if H[i][j] == 1 and H[i][j] == s[i]:
+        # Sort candidates by UPC (highest first)
+        candidates.sort(reverse=True, key=lambda x: x[0])
+        
+        # Compute the bit flips to perform
+        flips_e0 = []
+        flips_e1 = []
+        total_flips = 0
+        threshold_decrease = 0
+        
+        while total_flips == 0:
+            
+            # Calculate the current threshold
+            threshold = max(base_threshold - threshold_decrease, noise_floor + 1, 3)
+            
+            for (upc, error, j) in candidates:
                 
-                # Add this count to the weight
-                weight += 1
+                # Select only positions above the threshold
+                if upc < threshold:
+                    break
                 
-        # Return the final weight
-        return weight
-    
-    def BFiter(s: vector, e: vector, T: int, H: matrix) -> vector:
-        """
-        Perform an iteration in the calculation of the error vector.
-        
-        Parameters:
-            s: The current syndrome vector.
-            e: The current error vector.
-            T: The threshold for the current iteration.
-            H: The circulant matrix. 
-            
-        Returns:
-            vector: The updated error vector.
-        """
-        
-        # Run through all the vector positions
-        for j in range(len(e)):
-            
-            # Check if the position requires a bit flip
-            if ctr(H, s, j) >= T:
+                # Limit the number of flips
+                if total_flips >= t:
+                    break
                 
-                # Flip the bit
-                e[j] += 1
-        
-        # Return the updated error vector
-        return e
-    
-    def threshold(S: int, i: int, S0: int) -> int:
-        """
-        Compute the threshold for the current iteration.
-        
-        Parameters:
-            S: The hamming weight of the current syndrome.
-            i: The current iteration.
-            S0: The hamming weight of the starting syndrome.
-            
-        Returns:
-            int: The calculated threshold.
-        """
-        
-        # Define thershold auxiliar function
-        def Taux(x: int, i: int) -> float:
-            
-            if i == 0:
-                return f(x) + de
+                # Check which error vector to flip
+                if error == 'e0':
+                    flips_e0.append(j)
+                else:
+                    flips_e1.append(j)
+                    
+                # Increment the total flips
+                total_flips += 1
                 
-            if i == 1:
-                return (1/3 * (2 * f(x) + (w/2 + 1)/2)) + de
+            # Lower the threshold in case no flips were selected
+            threshold_decrease += 1
             
-            if i == 2:
-                return (1/3 * (f(x) + w/2 + 1)) + de
+        # Perform the bit flips and update the syndrome
+        for j in flips_e0:
             
-            if i >= 3:
-                return ((w/2 + 1)/2) + de
+            # Flip the bit
+            e0[j] = e0[j] + F2(1)
             
-        # Return the calculated threshold
-        return int(max(f(S), Taux(S0, i)))
-    
-    def hamming_weight(v: vector) -> int:
-        """
-        Compute the hamming weight of a binary vector.
-        
-        Parameters:
-            v (vector): The binary vector.
-            
-        Returns:
-            int: The hamming weight.
-        """
-        
-        # Placeholder for the weight
-        weight = 0
-        
-        # Compute the weight
-        for i in range(len(v)):
-            if v[i] == 1:
-                weight += 1
+            # Update the syndrome
+            for bit in h0_pos:
+                pos = (j + bit) % r
+                syndrome[pos] = syndrome[pos] + F2(1)
                 
-        # Return the calculated weight
-        return weight
-    
-    # Initialize the algorithm parameters
-    s0 = vector(c0 * h0)
-    s = vector(s0)
-    H0 = matrix.circulant(vector(h0))
-    H1 = matrix.circulant(vector(h1))
-    H = H0.augment(H1)
-    e = vector(GF(2), [0] * 2 * r)
-    
-    # Execute the BIKE bit flipping algorithm
-    print("BIKE Bit Flipping")
-    print(H)
-    
-    for i in range(nb):
-        
-        # Update the syndrome for this iteration
-        s = s + e * H.transpose()
-        
-        # Calculate the threshold for this iteration
-        T = threshold(hamming_weight(s), i, hamming_weight(s0))
-        
-        print("Threshold: ", T)
-        
-        # Update the error vector for this iteration
-        e = BFiter(s, e, T, H)    
-        
-        print("New e: ", e)
-        
-        # Check if algorithm reached solution
-        if s == e * H.transpose():
+        for j in flips_e1:
             
-            # Return the error tuple
-            return (e[:r], e[r:])
-        
-    print("Hello")
-    
-    # In case the algorithm fails, return failure results
-    return (R(vector(GF(2), [0] * r)), R(vector(GF(2), [0] * r)))
+            # Flip the bit
+            e1[j] = e1[j] + F2(1)
+            
+            # Update the syndrome
+            for bit in h1_pos:
+                pos = (j + bit) % r
+                syndrome[pos] = syndrome[pos] + F2(1)
+                
+    # In case of failure, return zero vectors
+    return (R([0] * r), R([0] * r))
 
 def bike_decapsulate(params: tuple, decod: tuple, hw: tuple, c: tuple) -> bytes:
     """
@@ -483,7 +488,7 @@ def bike_decapsulate(params: tuple, decod: tuple, hw: tuple, c: tuple) -> bytes:
     h0, h1, o = hw
     
     # Decrypt the cryptogram
-    e0, e1 = bike_decrypt(params, decod, hw, c0 * h0)
+    e0, e1 = bike_decrypt(params, decod, hw, c0)
     
     # Generate the recovered message
     m = bytes_xor(c1, bike_hash_errors(params, e0, e1))
@@ -495,27 +500,50 @@ def bike_decapsulate(params: tuple, decod: tuple, hw: tuple, c: tuple) -> bytes:
     # Generate the session key
     return bike_generate_session_key(params, m, c)
 
-params = bike_encapsulate_parameters(3000, 70, 60, 256)
+params = bike_encapsulate_parameters(12323, 142, 134, 256)
 decod = bike_encapsulate_decoding_parameters(7, 3, 0.006254868353074983, 11.101432337243956)
 
 print("Parameters")
-#print(params)
-#print(decod)
+print(params)
+print(decod)
 #print(decod[2](10))
 
-hw, h = bike_generate_key_pair(params)
+(h0, h1, o), h = bike_generate_key_pair(params)
 
-print("Keys - Private and Public")
+e0, e1 = bike_generate_error_vector_pair(params, b"Hell")
+
+#print(e0)
+#print(e1)
+
+c = bike_encrypt(h, (e0, e1))
+
+#print(c)
+
+e = bike_decrypt(params, decod, (h0, h1, o), c)
+
+print(e0)
+print(e1)
+print(e == (e0, e1))
+
+#print(h0)
+#print(h1)
+#print(o)
+
+#print(h)
+
+#hw, h = bike_generate_key_pair(params)
+
+#print("Keys - Private and Public")
 #print(hw)
 #print(h)
 
-k, c = bike_encapsulate(params, h)
+#k, c = bike_encapsulate(params, h)
 
-print("Session key + cryptogram")
-print(k)
+#print("Session key + cryptogram")
+#print(k)
 #print(c)
 
-kn = bike_decapsulate(params, decod, hw, c)
+#kn = bike_decapsulate(params, decod, hw, c)
 
-print("Decrypted Session key")
-print(kn)
+#print("Decrypted Session key")
+#print(kn)
