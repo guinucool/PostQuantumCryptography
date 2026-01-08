@@ -1,10 +1,9 @@
-from sage.all import GF, vector, matrix, PolynomialRing, xgcd
+from sage.all import GF, vector, PolynomialRing, xgcd
 import secrets as sec
 import random as rnd
 import hashlib as hl
-import math
 import sys
-from utils import bytes_xor, list_bitwise_xor, list_hamming_weight, list_rotate_left, list_bitwise_and
+from utils import bytes_xor
 
 def bike_encapsulate_parameters(r: int, w: int, t: int, l: int) -> tuple:
     """
@@ -34,23 +33,6 @@ def bike_encapsulate_parameters(r: int, w: int, t: int, l: int) -> tuple:
     
     # Return the parameters as a tuple
     return (r, w, t, l, F2, PR, R, modulus)
-
-def bike_encapsulate_decoding_parameters(nb: int, de: int, a: float, b: float) -> tuple:
-    """
-    Encapsulate BIKE decoding parameters into a tuple.
-
-    Parameters:
-        nb (int): Maximum number of iterations.
-        de (int): Auxiliar value.
-        a (float): Auxiliar value.
-        b (float): Auxiliar value.
-
-    Returns:
-        tuple: A tuple containing all the BIKE decoding parameters.
-    """
-    
-    # Return the parameters as a tuple
-    return (nb, de, lambda x: a * x + b)
 
 def bike_generate_random_vector(r: int, weight: int, seed: int = None) -> vector:
     """
@@ -215,7 +197,7 @@ def bike_hash_errors(params: tuple, e0: object, e1: object) -> bytes:
     """
     
     # Extract parameters from tuple
-    r, w, t, l, R = params
+    r, w, t, l, F2, PR, R, modulus = params
     
     # Join and convert the error vectors into a single format
     e = e0 + e1
@@ -242,7 +224,7 @@ def bike_generate_session_key(params: tuple, m: bytes, c: tuple) -> bytes:
     """
     
     # Extract parameters from tuple
-    r, w, t, l, R = params
+    r, w, t, l, F2, PR, R, modulus = params
     
     # Generate the session key
     h = hl.shake_256()
@@ -287,17 +269,13 @@ def bike_encapsulate(params: tuple, h: object) -> tuple:
     """
     
     # Extract parameters from the tuple
-    r, w, t, l, R = params
+    r, w, t, l, F2, PR, R, modulus = params
     
     # Generate a random messsage
     m = sec.token_bytes(l // 8)
     
     # Generate the error vectors from the message
     e0, e1 = bike_generate_error_vector_pair(params, m)
-    
-    print("Gen")
-    print("e0: ", e0)
-    print("e1: ", e1)
     
     # Encrypt the error vectors
     c0 = bike_encrypt(h, (e0, e1))
@@ -314,25 +292,23 @@ def bike_encapsulate(params: tuple, h: object) -> tuple:
     # Return the generated session key and capsule
     return (K, c)
 
-def bike_decrypt(params: tuple, decod: tuple, hw: tuple, s: object) -> tuple:
+def bike_decrypt(params: tuple, hw: tuple, s: object, max_iterations: int = 30, a: float = 0.6) -> tuple:
     """
     Decrypt a ciphertext using the BIKE cryptosystem.
 
     Parameters:
         params (tuple): The BIKE parameters.
-        decod (tuple): The tuple containing the BIKE decoding parameters.
         hw (tuple): A tuple containing the private key components (h0, h1, o).
         s (object): The syndrome ciphertext vector.
-    
+        max_iterations (int): Maximum number of iterations.
+        a (float): Threshold adjustment parameter.
+
     Returns:
         tuple: The error vectors (e0, e1).
     """
     
     # Extract parameters from the tuple
     r, w, t, l, F2, PR, R, modulus = params
-    
-    # Extract parameters from the tuple
-    nb, de, f = decod
     
     # Extract private key components
     h0, h1, _ = hw
@@ -341,11 +317,9 @@ def bike_decrypt(params: tuple, decod: tuple, hw: tuple, s: object) -> tuple:
     syndrome = s * h0
     
     # Decode the syndrome
-    return bike_decode(params, syndrome, hw)
+    return bike_decode(params, syndrome, hw, max_iterations, a)
 
-#def bike_decoder()
-
-def bike_decode(params: tuple, s: object, hw: tuple, max_iterations=30) -> tuple:
+def bike_decode(params: tuple, s: object, hw: tuple, max_iterations: int = 30, a: float = 0.6) -> tuple:
     """
     BIKE Decoder using the Black-Gray-Flip (BGF) algorithm.
     
@@ -354,6 +328,7 @@ def bike_decode(params: tuple, s: object, hw: tuple, max_iterations=30) -> tuple
         s (object): The syndrome to decode.
         hw (tuple): The private key components.
         max_iterations (int): Maximum number of iterations.
+        a (float): Threshold adjustment parameter.
         
     Returns:
         tuple: The decoded error vectors (e0, e1).
@@ -393,7 +368,7 @@ def bike_decode(params: tuple, s: object, hw: tuple, max_iterations=30) -> tuple
         
         # Calculate the thresholds
         noise_floor = syndrome_weight * d // r
-        base_threshold = max(int(d * 0.7), noise_floor + 2)
+        base_threshold = max(int(d * a), noise_floor + 2)
         
         # Compute unsatisfied parity checks (UPCs)
         candidates = []
@@ -464,22 +439,23 @@ def bike_decode(params: tuple, s: object, hw: tuple, max_iterations=30) -> tuple
     # In case of failure, return zero vectors
     return (R([0] * r), R([0] * r))
 
-def bike_decapsulate(params: tuple, decod: tuple, hw: tuple, c: tuple) -> bytes:
+def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 30, a: float = 0.6) -> bytes:
     """
     Decapsulate a capsule and generate a session key using BIKE cryptosystem.
     
     Parameters:
         params (tuple): The tuple containing the BIKE parameters.
-        decod (tuple): The tuple containing the BIKE decoding parameters.
         hw (tuple): The tuple containing the private key.
         c (tuple): The capsule.
+        max_iterations (int): Maximum number of iterations.
+        a (float): Threshold adjustment parameter.
         
     Returns:
         bytes: The generated session key.
     """
     
     # Extract parameters from the tuple
-    r, w, t, l, R = params
+    r, w, t, l, F2, PR, R, modulus = params
     
     # Decapsulate the capsule
     c0, c1 = c
@@ -488,7 +464,7 @@ def bike_decapsulate(params: tuple, decod: tuple, hw: tuple, c: tuple) -> bytes:
     h0, h1, o = hw
     
     # Decrypt the cryptogram
-    e0, e1 = bike_decrypt(params, decod, hw, c0)
+    e0, e1 = bike_decrypt(params, hw, c0, max_iterations, a)
     
     # Generate the recovered message
     m = bytes_xor(c1, bike_hash_errors(params, e0, e1))
@@ -500,30 +476,30 @@ def bike_decapsulate(params: tuple, decod: tuple, hw: tuple, c: tuple) -> bytes:
     # Generate the session key
     return bike_generate_session_key(params, m, c)
 
-params = bike_encapsulate_parameters(12323, 142, 134, 256)
-decod = bike_encapsulate_decoding_parameters(7, 3, 0.006254868353074983, 11.101432337243956)
+params = bike_encapsulate_parameters(12323, 142, 134, 128)
+#params = bike_encapsulate_parameters(24659, 206, 199, 192)
+#params = bike_encapsulate_parameters(40973, 274, 264, 256)
 
 print("Parameters")
 print(params)
-print(decod)
-#print(decod[2](10))
 
-(h0, h1, o), h = bike_generate_key_pair(params)
+sk, pk = bike_generate_key_pair(params)
 
-e0, e1 = bike_generate_error_vector_pair(params, b"Hell")
+#(k, c) = bike_encapsulate(params, pk)
 
-#print(e0)
-#print(e1)
+#nk = bike_decapsulate(params, decod, sk, c)
 
-c = bike_encrypt(h, (e0, e1))
+e = bike_generate_error_vector_pair(params, b"Hello, BIKE!")
 
-#print(c)
+s = bike_encrypt(pk, e)
 
-e = bike_decrypt(params, decod, (h0, h1, o), c)
+ne = bike_decrypt(params, sk, s)
 
-print(e0)
-print(e1)
-print(e == (e0, e1))
+print(e)
+print(ne)
+print(e == ne)
+
+#print(k == nk)
 
 #print(h0)
 #print(h1)
