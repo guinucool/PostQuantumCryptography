@@ -476,7 +476,8 @@ def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 3
     # Generate the session key
     return bike_generate_session_key(params, m, c)
 
-params = bike_encapsulate_parameters(12323, 142, 134, 128)
+params = bike_encapsulate_parameters(587, 42, 19, 128)
+#params = bike_encapsulate_parameters(12323, 142, 134, 128)
 #params = bike_encapsulate_parameters(24659, 206, 199, 192)
 #params = bike_encapsulate_parameters(40973, 274, 264, 256)
 

@@ -183,7 +183,7 @@ def classic_mceleice_encapsulate(public_key: matrix, e: vector) -> tuple:
         e (vector): The error vector.
     
     Returns:
-        tuple: The encapsulated key and the generated session key.
+        tuple: The encapsulated ciphertext and the generated session key.
     """
     
     # Encrypt the error vector to get the ciphertext
@@ -276,7 +276,7 @@ def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple, e:
         e (vector): The error vector (in case of attack).
     
     Returns:
-        vector: The decrypted message vector.
+        vector: The decrypted session key.
     """
     
     # Extract parameters from the tuple
@@ -321,15 +321,21 @@ def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple, e:
     # Return the generated session key hash
     return K
 
+params = classic_mceleice_encapsulate_parameters(196, 6, 8)
 #params = classic_mceleice_encapsulate_parameters(n=3488, t=64, m=12)
-params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
+#params = classic_mceleice_encapsulate_parameters(n=4608, t=96, m=13)
+#params = classic_mceleice_encapsulate_parameters(n=6688, t=128, m=13)
+#params = classic_mceleice_encapsulate_parameters(n=6960, t=119, m=13)
+#params = classic_mceleice_encapsulate_parameters(n=8192, t=128, m=13)
+#params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
 
 print("(n, t, m, k)")
 print(params)
 
 pair = classic_mceleice_generate_key_pair(params)
 
-print("Key pair generated successfully.\n", pair)
+print("Key pair generated successfully.\n")
+print(pair[1])
 
 e = classic_mceleice_generate_error_vector(params)
 
