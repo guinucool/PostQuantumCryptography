@@ -15,3 +15,16 @@ The algorithms implemented in this section include:
 In addition to these algorithms, several exercises assigned during the course were completed. You can find the exercises and their solutions here:
 
 [Lattice-Based Cryptography Exercises](lattice-based/README.md)
+
+## Code-Based Cryptography
+
+Code-based cryptography relies on the hardness of decoding a general linear error-correcting code, a problem believed to remain intractable even in the presence of quantum adversaries.  
+The algorithms implemented in this section include:
+
+- **Classic McEliece cryptosystem**
+- **BIKE cryptosystem**
+- **Information Set Decoding (ISD) attack**
+
+In addition to these algorithms, several exercises assigned during the course were completed. You can find the exercises and their solutions here:
+
+[Code-Based Cryptography Exercises](code-based/README.md)
