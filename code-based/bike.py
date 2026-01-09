@@ -444,7 +444,7 @@ def bike_decode(params: tuple, s: object, hw: tuple, max_iterations: int = 30, a
     # In case of failure, return zero vectors
     return (R([0] * r), R([0] * r))
 
-def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 30, a: float = 0.6) -> bytes:
+def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 30, a: float = 0.6, e: tuple = None) -> bytes:
     """
     Decapsulate a capsule and generate a session key using BIKE cryptosystem.
     
@@ -454,6 +454,7 @@ def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 3
         c (tuple): The capsule.
         max_iterations (int): Maximum number of iterations.
         a (float): Threshold adjustment parameter.
+        e (tuple): Error tuple in case of attack.
         
     Returns:
         bytes: The generated session key.
@@ -469,7 +470,10 @@ def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 3
     h0, h1, o = hw
     
     # Decrypt the cryptogram
-    e0, e1 = bike_decrypt(params, hw, c0, max_iterations, a)
+    if e is None:
+        e0, e1 = bike_decrypt(params, hw, c0, max_iterations, a)
+    else:
+        e0, e1 = (R(e[0]), R(e[1]))
     
     # Generate the recovered message
     m = bytes_xor(c1, bike_hash_errors(params, e0, e1))
@@ -482,54 +486,54 @@ def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 3
     return bike_generate_session_key(params, m, c)
 
 #params = bike_encapsulate_parameters(73, 8, 5, 128)
-params = bike_encapsulate_parameters(37, 42, 7, 128)
+#params = bike_encapsulate_parameters(37, 42, 7, 128)
 #params = bike_encapsulate_parameters(149, 12, 7, 128)
 #params = bike_encapsulate_parameters(293, 18, 1, 128)
-params = bike_encapsulate_parameters(229, 16, 12, 128)
+#params = bike_encapsulate_parameters(229, 16, 12, 128)
 #params = bike_encapsulate_parameters(293, 18, 15, 128)
 #params = bike_encapsulate_parameters(587, 42, 19, 128)
 #params = bike_encapsulate_parameters(12323, 142, 134, 128)
 #params = bike_encapsulate_parameters(24659, 206, 199, 192)
 #params = bike_encapsulate_parameters(40973, 274, 264, 256)
 
-print("Parameters")
-print(params)
-print(sys.getrecursionlimit())
+#print("Parameters")
+#print(params)
+#print(sys.getrecursionlimit())
 
-try:
-    sk, pk = bike_generate_key_pair(params)
-except Exception:
-    print(key_set)
-    print(len(key_set))
-    exit()
+#try:
+#    sk, pk = bike_generate_key_pair(params)
+#except Exception:
+#    print(key_set)
+#    print(len(key_set))
+#    exit()
 
 #(k, c) = bike_encapsulate(params, pk)
 
 #nk = bike_decapsulate(params, decod, sk, c)
 
-e = bike_generate_error_vector_pair(params, b"Hello, BIKE!")
+#e = bike_generate_error_vector_pair(params, b"Hello, BIKE!")
 
-s = bike_encrypt(pk, e)
+#s = bike_encrypt(pk, e)
 
-print(vector(pk))
+#print(vector(pk))
 
-Rot_h = matrix.circulant(vector(GF(2), pk))
-I_r = matrix.identity(GF(2), params[0])
-H_r = I_r.augment(Rot_h)
+#Rot_h = matrix.circulant(vector(GF(2), pk))
+#I_r = matrix.identity(GF(2), params[0])
+#H_r = I_r.augment(Rot_h)
 
 #print(H_r)
-print(H_r.nrows())
-print(H_r.ncols)
+#print(H_r.nrows())
+#print(H_r.ncols)
 
-e_combined = isd_prange(H_r, vector(GF(2), s), params[2])
+#e_combined = isd_prange(H_r, vector(GF(2), s), params[2])
 
-print(e_combined)
+#print(e_combined)
 
-ne = bike_decrypt(params, sk, s)
+#ne = bike_decrypt(params, sk, s)
 
-print(e)
-print(ne)
-print(e == ne)
+#print(e)
+#print(ne)
+#print(e == ne)
 
 #print(k == nk)
 

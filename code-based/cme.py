@@ -1,7 +1,6 @@
 from sage.all import matrix, vector, GF, codes, identity_matrix, PolynomialRing
 import secrets as sec
 import hashlib as hl
-from isd import isd_prange
 
 def classic_mceleice_encapsulate_parameters(n: int, t: int, m: int) -> tuple:
     """
@@ -320,48 +319,3 @@ def classic_mceleice_decapsulate(params: tuple, private_key: tuple, c: tuple, e:
 
     # Return the generated session key hash
     return K
-
-params = classic_mceleice_encapsulate_parameters(196, 6, 8)
-#params = classic_mceleice_encapsulate_parameters(n=3488, t=64, m=12)
-#params = classic_mceleice_encapsulate_parameters(n=4608, t=96, m=13)
-#params = classic_mceleice_encapsulate_parameters(n=6688, t=128, m=13)
-#params = classic_mceleice_encapsulate_parameters(n=6960, t=119, m=13)
-#params = classic_mceleice_encapsulate_parameters(n=8192, t=128, m=13)
-#params = classic_mceleice_encapsulate_parameters(n=7, t=1, m=3)
-
-print("(n, t, m, k)")
-print(params)
-
-pair = classic_mceleice_generate_key_pair(params)
-
-print("Key pair generated successfully.\n")
-print(pair[1])
-
-e = classic_mceleice_generate_error_vector(params)
-
-print("Error vector generated successfully.\n", e)
-
-ct = classic_mceleice_encrypt(pair[1], e)
-
-I = matrix(GF(2), identity_matrix(pair[1].nrows()))
-H = I.augment(pair[1])
-
-print("Ciphertext generated successfully.\n", ct)
-
-print("Decrypting attack the message...")
-
-print(isd_prange(H, ct, params[1]))
-
-#d = classic_mceleice_decrypt(params, pair[0], ct)
-
-#print("Decrypted message successfully.\n", d)
-
-#c, K = classic_mceleice_encapsulate(pair[1], e)
-
-#print("Session generated successfully.\n", K)
-
-#nK = classic_mceleice_decapsulate(params, pair[0], c)
-
-#print("Decrypted message successfully.\n", nK)
-
-#print("Session keys match:", K == nK)
