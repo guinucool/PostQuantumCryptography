@@ -113,3 +113,38 @@ The primary concern with quantum computing threats applies differently to NTRU t
 
 ### Analysis of the LWE cryptosystem
 
+The Learning With Errors (LWE) cryptosystem was evaluated across six distinct parameter sets, each tested 100 times to ensure statistical reliability. LWE represents a fundamentally different approach to lattice-based cryptography compared to GGH/HNF and NTRU, relying on the computational hardness of distinguishing noisy linear equations from truly random data. The parameter sets are denoted as (n, l, m, q, r, t, a), where n represents the security parameter (dimension), l the length of the message vector, m the number of samples, q is the modulus, and r, t, and a control the error distribution and encoding parameters.
+
+#### Key Size
+
+![Figure 12](img/lwekeysize.png)
+
+The key size analysis (Figure 12) reveals a complex and non-uniform growth pattern that distinguishes LWE from both GGH/HNF and NTRU. The first five parameter sets maintain relatively similar key sizes, all clustered between approximately 1.8 million and 2.5 million bytes (1.8-2.5 MB). Specifically, the parameter sets show: (n:136) at approximately 2.2 MB, (n:166) at approximately 1.8 MB, (n:192) at approximately 2.5 MB, (n:214) at approximately 2.5 MB, and (n:233) at approximately 2.1 MB. However, the largest parameter set (n:233, with different subsidiary parameters) exhibits a dramatic increase to approximately 9.0 million bytes (9 MB).
+
+This substantial key size, orders of magnitude larger than NTRU (maximum 3.2 KB) and significantly larger than GGH/HNF (maximum 65 KB), represents a critical practical limitation of LWE-based cryptosystems. The storage requirement stems from the need to store the public key matrix A and other LWE parameters, which scale with both n and the number of samples l. The dramatic jump in the final parameter set suggests that achieving higher security levels in LWE requires disproportionately large key storage, making the scheme challenging for resource-constrained environments. This represents one of the primary obstacles to widespread LWE deployment, particularly in embedded systems or bandwidth-limited applications.
+
+#### Performance Analysis
+
+![Figure 13](img/lwekeytime.png)
+
+The temporal performance characteristics of LWE reveal interesting patterns across the parameter sets. Key generation time (Figure 13) shows moderate variation across the first five parameter sets, ranging from approximately 315 ms for the second parameter set (n:166) to approximately 420 ms for the first (n:136), third (n:192), and fourth (n:214) parameter sets. The fifth parameter set (n:233) requires approximately 360 ms. However, the sixth and largest parameter set demands dramatically more time at approximately 1,480 ms (1.48 seconds).
+
+This pattern indicates that key generation time scales roughly with the dimension n and the number of LWE samples, but the relationship is not strictly monotonic across all parameters. The jump in the final parameter set correlates with its substantially larger key size, suggesting that the increased security parameters require generating and storing significantly more LWE samples, each of which involves sampling from error distributions and performing modular arithmetic operations.
+
+![Figure 14](img/lwedecryptiontime.png)
+
+Decryption time (Figure 14) demonstrates remarkable consistency and efficiency across all parameter sets, remaining at approximately 0.23-0.63 milliseconds across the board. The measurements show minimal variation: (n:136) at approximately 0.35 ms, (n:166) at approximately 0.42 ms, (n:192) at approximately 0.23 ms, (n:214) at approximately 0.27 ms, (n:233) at approximately 0.63 ms, and the final parameter set at approximately 0.36 ms. This exceptional decryption speed, measured in fractions of a millisecond, represents one of LWE's most significant practical advantages.
+
+The near-instantaneous decryption times reflect the computational simplicity of LWE decryption, which primarily consists of inner product computations and rounding operations. Unlike NTRU's polynomial multiplication or GGH/HNF's matrix operations on large dimensions, LWE decryption scales linearly with dimension and remains extremely efficient even for high-security parameters. This makes LWE particularly attractive for applications requiring rapid decryption, despite its substantial key size overhead.
+
+#### Decryption Success Rate
+
+![Figure 15](img/lwedecryption.png)
+
+The decryption success rate (Figure 15) demonstrates perfect reliability, maintaining a consistent 100% success rate across all six parameter sets without exception. This flawless decryption performance across diverse parameter configurations underscores one of LWE's fundamental strengths: when parameters are properly chosen to ensure that the error terms remain bounded, decryption becomes deterministic and always succeeds.
+
+The perfect success rate stems from LWE's theoretical foundations and parameter selection methodology. The error distribution (controlled by parameter a) is carefully chosen such that the accumulated error during encryption and decryption remains small enough to not affect the recovered message. Unlike GGH/HNF, which showed instability at low dimensions, LWE's mathematical structure guarantees perfect correctness when the fundamental inequality conditions on the error bounds are satisfied.
+
+#### Security Implications
+
+This deterministic correctness, combined with the sub-millisecond decryption times, positions LWE as highly reliable for applications where consistent performance is critical, provided that the substantial key storage requirements can be accommodated.
