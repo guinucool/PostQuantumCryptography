@@ -1,9 +1,12 @@
-from sage.all import GF, vector, PolynomialRing, xgcd
+from sage.all import GF, vector, PolynomialRing, xgcd, matrix
 import secrets as sec
 import random as rnd
 import hashlib as hl
 import sys
 from utils import bytes_xor
+from isd import isd_prange
+
+key_set = set()
 
 def bike_encapsulate_parameters(r: int, w: int, t: int, l: int) -> tuple:
     """
@@ -91,6 +94,8 @@ def bike_generate_private_key(params: tuple) -> tuple:
     h0 = R(bike_generate_random_vector(r, w // 2))
     h1 = R(bike_generate_random_vector(r, w // 2))
     o = sec.token_bytes(l // 8)
+    
+    key_set.add(h0)
     
     # Return the private key as a tuple
     return (h0, h1, o)
@@ -476,15 +481,27 @@ def bike_decapsulate(params: tuple, hw: tuple, c: tuple, max_iterations: int = 3
     # Generate the session key
     return bike_generate_session_key(params, m, c)
 
-params = bike_encapsulate_parameters(587, 42, 19, 128)
+#params = bike_encapsulate_parameters(73, 8, 5, 128)
+params = bike_encapsulate_parameters(37, 42, 7, 128)
+#params = bike_encapsulate_parameters(149, 12, 7, 128)
+#params = bike_encapsulate_parameters(293, 18, 1, 128)
+params = bike_encapsulate_parameters(229, 16, 12, 128)
+#params = bike_encapsulate_parameters(293, 18, 15, 128)
+#params = bike_encapsulate_parameters(587, 42, 19, 128)
 #params = bike_encapsulate_parameters(12323, 142, 134, 128)
 #params = bike_encapsulate_parameters(24659, 206, 199, 192)
 #params = bike_encapsulate_parameters(40973, 274, 264, 256)
 
 print("Parameters")
 print(params)
+print(sys.getrecursionlimit())
 
-sk, pk = bike_generate_key_pair(params)
+try:
+    sk, pk = bike_generate_key_pair(params)
+except Exception:
+    print(key_set)
+    print(len(key_set))
+    exit()
 
 #(k, c) = bike_encapsulate(params, pk)
 
@@ -493,6 +510,20 @@ sk, pk = bike_generate_key_pair(params)
 e = bike_generate_error_vector_pair(params, b"Hello, BIKE!")
 
 s = bike_encrypt(pk, e)
+
+print(vector(pk))
+
+Rot_h = matrix.circulant(vector(GF(2), pk))
+I_r = matrix.identity(GF(2), params[0])
+H_r = I_r.augment(Rot_h)
+
+#print(H_r)
+print(H_r.nrows())
+print(H_r.ncols)
+
+e_combined = isd_prange(H_r, vector(GF(2), s), params[2])
+
+print(e_combined)
 
 ne = bike_decrypt(params, sk, s)
 
